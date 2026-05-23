@@ -429,3 +429,37 @@ npm start
 **⚠️ Disclaimer**: This tool is designed for legitimate content creation. Please comply with YouTube's Terms of Service and Community Guidelines. The creators are not responsible for any misuse of this software.
 
 *Built with ❤️ by the community. Making YouTube automation accessible to everyone.*
+## 🏭 Production Deployment Assets
+
+This repository now includes production-ready deployment and workflow assets:
+
+- `Dockerfile` + `docker-compose.yml` for containerized deployment
+- `ecosystem.config.cjs` for PM2 process management
+- `scripts/deploy.sh` for one-command server deployment
+- `scripts/run-workflows.sh` for runnable daily/weekly workflow execution
+- `workflows/daily-content-pipeline.js` and `workflows/weekly-strategy-review.js`
+
+### Deploy with PM2 (VPS)
+
+```bash
+cp .env.example .env
+# fill in credentials
+npm install
+./scripts/deploy.sh
+```
+
+### Deploy with Docker
+
+```bash
+docker compose up -d --build
+```
+
+### Run Workflows Manually
+
+```bash
+# Daily pipeline (optional topic/style/length)
+./scripts/run-workflows.sh daily "AI productivity" "tutorial" "short"
+
+# Weekly strategy review
+./scripts/run-workflows.sh weekly
+```
