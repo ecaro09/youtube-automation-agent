@@ -249,26 +249,30 @@ class AIVideoGenerator {
     await page.waitForTimeout(1000); // Wait for assets to load
     
     // Create video frames by taking screenshots at intervals
-    const duration = this.calculateScriptDuration(script);
+    // Match the visuals to the real narration length so -shortest never cuts the voiceover
+    const duration = (await this.getAudioDuration(audioPath)) || this.calculateScriptDuration(script);
     const frameCount = Math.ceil(duration * 30); // 30 FPS
     const frameInterval = duration / frameCount * 1000;
+    const slideChangeFrames = new Set(this.getSlideChangeFrames(script, frameCount));
 
     const framesDir = path.join(path.dirname(outputPath), 'frames');
     await fs.mkdir(framesDir, { recursive: true });
 
     for (let i = 0; i < frameCount; i++) {
+      // Advance to the next scene when its narration starts
+      if (slideChangeFrames.has(i)) {
+        await page.evaluate(() => {
+          if (window.advanceAnimation) {
+            window.advanceAnimation();
+          }
+        });
+      }
+
       await page.screenshot({
         path: path.join(framesDir, `frame_${String(i).padStart(6, '0')}.png`),
         fullPage: true
       });
-      
-      // Advance animation
-      await page.evaluate(() => {
-        if (window.advanceAnimation) {
-          window.advanceAnimation();
-        }
-      });
-      
+
       await page.waitForTimeout(frameInterval);
     }
 
@@ -464,47 +468,97 @@ class AIVideoGenerator {
       ).join('');
     }
     
+    if (Array.isArray(section.content)) {
+      return section.content
+        .filter(line => typeof line === 'string' && !line.startsWith('['))
+        .slice(0, 3)
+        .map(line => `<p>${line}</p>`)
+        .join('');
+    }
+
     if (typeof section.content === 'string') {
       return `<p>${section.content.slice(0, 200)}${section.content.length > 200 ? '...' : ''}</p>`;
     }
-    
+
     return '<p>Content coming soon...</p>';
+  }
+
+  // Narrated text per slide (title, one per section, subscribe), mirroring
+  // ProductionManagementAgent.formatScriptForTTS so visuals track the voiceover.
+  getSlideNarration(script) {
+    const join = parts => parts.filter(part => typeof part === 'string').join(' ');
+    const slides = [];
+
+    const intro = script.introduction || {};
+    slides.push(join([
+      script.hook && script.hook.text,
+      intro.greeting, intro.topicIntro, intro.valueProposition, intro.credibility
+    ]));
+
+    if (script.mainContent && script.mainContent.sections) {
+      script.mainContent.sections.forEach((section, index) => {
+        const parts = [`Section ${index + 1}: ${section.title}`];
+        if (Array.isArray(section.content)) {
+          parts.push(...section.content.filter(line => typeof line === 'string' && !line.startsWith('[')));
+        } else if (section.steps) {
+          section.steps.forEach(step => parts.push(step.title, step.description, step.tip));
+        } else if (section.items) {
+          section.items.forEach(item => parts.push(`Number ${item.number}: ${item.title}. ${item.description}`));
+        } else if (typeof section.content === 'string') {
+          parts.push(section.content);
+        }
+        slides.push(join(parts));
+      });
+    }
+
+    const conclusion = script.conclusion || {};
+    const cta = script.callToAction || {};
+    slides.push(join([
+      ...(conclusion.recap || []), conclusion.finalThought,
+      cta.subscribe, cta.like, cta.comment
+    ]));
+
+    return slides;
+  }
+
+  countWords(text) {
+    return text.split(/\s+/).filter(Boolean).length;
   }
 
   calculateScriptDuration(script) {
     // Estimate duration based on word count (average 150 words per minute)
-    let totalWords = 0;
-    
-    if (script.hook) totalWords += script.hook.text.split(' ').length;
-    if (script.introduction) {
-      totalWords += (script.introduction.greeting || '').split(' ').length;
-      totalWords += (script.introduction.topicIntro || '').split(' ').length;
-    }
-    
-    if (script.mainContent && script.mainContent.sections) {
-      script.mainContent.sections.forEach(section => {
-        if (typeof section.content === 'string') {
-          totalWords += section.content.split(' ').length;
-        }
-        if (section.items) {
-          section.items.forEach(item => {
-            totalWords += (item.title + ' ' + item.description).split(' ').length;
-          });
-        }
-        if (section.steps) {
-          section.steps.forEach(step => {
-            totalWords += (step.title + ' ' + step.description).split(' ').length;
-          });
-        }
-      });
-    }
-    
-    if (script.conclusion) {
-      totalWords += script.conclusion.finalThought.split(' ').length;
-    }
-    
-    // Convert to duration (150 words per minute)
+    const totalWords = this.getSlideNarration(script)
+      .reduce((sum, text) => sum + this.countWords(text), 0);
+
     return Math.max(30, Math.ceil((totalWords / 150) * 60));
+  }
+
+  // Frame indexes at which the slideshow moves to the next slide, with each
+  // slide's screen time proportional to the words narrated over it.
+  getSlideChangeFrames(script, totalFrames) {
+    const weights = this.getSlideNarration(script).map(text => Math.max(1, this.countWords(text)));
+    const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+    const changes = [];
+    let cumulative = 0;
+
+    for (let i = 0; i < weights.length - 1; i++) {
+      cumulative += weights[i];
+      changes.push(Math.round((cumulative / totalWeight) * totalFrames));
+    }
+
+    return changes;
+  }
+
+  async getAudioDuration(audioPath) {
+    try {
+      const { stdout } = await execAsync(
+        `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioPath}"`
+      );
+      const seconds = parseFloat(stdout);
+      return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+    } catch (error) {
+      return null;
+    }
   }
 
   async addAudioToVideo(videoPath, audioPath, outputPath) {
