@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shorts Studio</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --line: #262b36; --text: #e8eaf0; --muted: #8b93a7;
+    --accent: #ef4444; --accent-2: #f97316; --ok: #22c55e; --warn: #eab308;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 18px 24px; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 20px; margin: 0; }
+  .pill { font-size: 12px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
+  .pill.warn { color: var(--warn); border-color: var(--warn); }
+  .pill.ok { color: var(--ok); border-color: var(--ok); }
+  main { display: grid; grid-template-columns: 360px 1fr; gap: 20px; padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 16px; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  h2 { font-size: 15px; margin: 0 0 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  input, select, textarea { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; font: inherit; }
+  textarea { resize: vertical; min-height: 64px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  button { cursor: pointer; border: 0; border-radius: 8px; padding: 10px 14px; font: inherit; font-weight: 600; color: #fff; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+  button.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); font-weight: 500; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .full { width: 100%; margin-top: 14px; }
+  .jobs { margin-top: 20px; display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow: auto; }
+  .job { text-align: left; background: var(--bg); border: 1px solid var(--line); color: var(--text); font-weight: 500; display: flex; justify-content: space-between; gap: 8px; }
+  .job.active { border-color: var(--accent); }
+  .job small { color: var(--muted); white-space: nowrap; }
+  .detail-head { display: flex; gap: 20px; flex-wrap: wrap; }
+  video { width: 270px; max-width: 100%; aspect-ratio: 9/16; background: #000; border-radius: 10px; }
+  .meta { flex: 1; min-width: 240px; }
+  .meta h3 { margin: 0 0 6px; font-size: 18px; }
+  .bar { height: 8px; background: var(--bg); border-radius: 99px; overflow: hidden; margin: 10px 0; }
+  .bar > div { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .4s; }
+  .muted { color: var(--muted); }
+  .error { color: var(--accent); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  .actions select { width: auto; }
+  .scenes { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-top: 20px; }
+  .scene { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+  .scene img { width: 100%; aspect-ratio: 9/16; object-fit: cover; border-radius: 6px; background: #000; }
+  .scene button { width: 100%; margin-top: 8px; }
+  .empty { color: var(--muted); text-align: center; padding: 60px 20px; }
+  a { color: var(--accent-2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎬 Shorts Studio</h1>
+  <span id="mode" class="pill">…</span>
+  <span id="yt" class="pill">…</span>
+</header>
+<main>
+  <section class="panel">
+    <h2>New short</h2>
+    <form id="form">
+      <label for="topic">Topic or idea</label>
+      <textarea id="topic" required placeholder="e.g. 5 ergonomic desk mistakes that ruin your back"></textarea>
+      <div class="row">
+        <div><label for="duration">Length (sec)</label><input id="duration" type="number" min="15" max="90" value="40"></div>
+        <div><label for="language">Language</label><input id="language" value="English"></div>
+      </div>
+      <div class="row">
+        <div><label for="voice">Voice</label><select id="voice"></select></div>
+        <div><label for="style">Visual style</label><select id="style"></select></div>
+      </div>
+      <button class="full" id="create" type="submit">Generate video</button>
+    </form>
+    <div class="jobs" id="jobs"></div>
+  </section>
+  <section class="panel" id="detail"><div class="empty">Create a short or pick one from the list.</div></section>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let current = null, pollTimer = null, renderedKey = '';
+
+async function api(url, opts = {}) {
+  const res = await fetch(url, { headers: { 'content-type': 'application/json' }, ...opts });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || res.statusText);
+  return body;
+}
+
+async function loadOptions() {
+  const o = await api('/api/shorts/options');
+  $('#voice').innerHTML = o.voices.map((v) => `<option ${v === 'onyx' ? 'selected' : ''}>${v}</option>`).join('');
+  $('#style').innerHTML = o.styles.map((s) => `<option>${s}</option>`).join('');
+  $('#mode').textContent = o.offline ? 'Offline demo mode (no OPENAI_API_KEY)' : 'OpenAI connected';
+  $('#mode').className = 'pill ' + (o.offline ? 'warn' : 'ok');
+  $('#yt').textContent = o.youtubeConnected ? 'YouTube connected' : 'YouTube not connected';
+  $('#yt').className = 'pill ' + (o.youtubeConnected ? 'ok' : 'warn');
+}
+
+async function loadJobs() {
+  const jobs = await api('/api/shorts');
+  $('#jobs').innerHTML = jobs.map((j) => `
+    <button class="job ${current === j.id ? 'active' : ''}" data-id="${j.id}">
+      <span>${esc(j.script?.title || j.options.topic)}</span><small>${j.status === 'running' ? j.progress + '%' : esc(j.status)}</small>
+    </button>`).join('');
+  document.querySelectorAll('.job').forEach((b) => (b.onclick = () => select(b.dataset.id)));
+}
+
+function select(id) {
+  current = id; renderedKey = '';
+  clearTimeout(pollTimer);
+  poll();
+  loadJobs();
+}
+
+async function poll() {
+  if (!current) return;
+  try {
+    const job = await api('/api/shorts/' + current);
+    renderDetail(job);
+    if (job.status === 'running' || job.status === 'queued') pollTimer = setTimeout(poll, 1500);
+    else loadJobs();
+  } catch (e) {
+    $('#detail').innerHTML = `<div class="empty error">${esc(e.message)}</div>`;
+  }
+}
+
+function renderDetail(job) {
+  const busy = job.status === 'running' || job.status === 'queued';
+  // Avoid re-rendering (and losing textarea edits) unless something changed.
+  const key = JSON.stringify([job.status, job.step, job.progress, job.video?.renderedAt, job.publish, job.error]);
+  if (key === renderedKey) return;
+  renderedKey = key;
+  const file = (n) => `/api/shorts/${job.id}/files/${n}`;
+  const v = job.video ? `${file(job.video.file)}?t=${encodeURIComponent(job.video.renderedAt)}` : '';
+  $('#detail').innerHTML = `
+    <div class="detail-head">
+      ${v ? `<video src="${v}" controls playsinline></video>` : `<video></video>`}
+      <div class="meta">
+        <h3>${esc(job.script?.title || job.options.topic)}</h3>
+        <div class="muted">${esc(job.options.voice)} voice · ${esc(job.options.style)} · ${esc(job.options.language)}${job.video ? ' · ' + job.video.duration + 's' : ''}${job.offline ? ' · offline placeholders' : ''}</div>
+        <div class="bar"><div style="width:${job.progress}%"></div></div>
+        <div class="${job.status === 'failed' ? 'error' : 'muted'}">${esc(job.status === 'failed' ? job.error : job.step)}</div>
+        ${job.script?.description ? `<p class="muted">${esc(job.script.description)}</p>` : ''}
+        ${job.script?.tags?.length ? `<p class="muted">${job.script.tags.map((t) => '#' + esc(t)).join(' ')}</p>` : ''}
+        <div class="actions">
+          ${job.video ? `<a href="${v}" download="short.mp4"><button class="ghost" type="button">Download MP4</button></a>` : ''}
+          ${job.video ? `<select id="privacy"><option>private</option><option>unlisted</option><option>public</option></select>
+            <button id="publish" ${busy ? 'disabled' : ''}>Publish to YouTube</button>` : ''}
+        </div>
+        ${job.publish ? `<p>Published: <a href="${esc(job.publish.url)}" target="_blank" rel="noopener">${esc(job.publish.url)}</a></p>` : ''}
+      </div>
+    </div>
+    <div class="scenes">
+      ${job.scenes.map((s) => `
+        <div class="scene">
+          ${s.image ? `<img src="${file(s.image)}" alt="Scene ${s.index + 1}">` : ''}
+          <label>Scene ${s.index + 1} narration</label>
+          <textarea data-n="${s.index}" data-f="narration">${esc(s.narration)}</textarea>
+          <label>Image prompt</label>
+          <textarea data-n="${s.index}" data-f="imagePrompt">${esc(s.imagePrompt)}</textarea>
+          <button class="ghost regen" data-n="${s.index}" ${busy ? 'disabled' : ''}>Regenerate scene</button>
+        </div>`).join('')}
+    </div>`;
+  document.querySelectorAll('.regen').forEach((b) => (b.onclick = () => regen(job.id, b.dataset.n)));
+  const pub = $('#publish');
+  if (pub) pub.onclick = () => publish(job.id);
+}
+
+async function regen(id, n) {
+  const field = (f) => document.querySelector(`textarea[data-n="${n}"][data-f="${f}"]`).value;
+  try {
+    await api(`/api/shorts/${id}/scenes/${n}`, { method: 'POST', body: JSON.stringify({ narration: field('narration'), imagePrompt: field('imagePrompt') }) });
+    renderedKey = '';
+    setTimeout(poll, 300);
+  } catch (e) { alert(e.message); }
+}
+
+async function publish(id) {
+  const btn = $('#publish');
+  btn.disabled = true; btn.textContent = 'Uploading…';
+  try {
+    await api(`/api/shorts/${id}/publish`, { method: 'POST', body: JSON.stringify({ privacyStatus: $('#privacy').value }) });
+    renderedKey = ''; poll();
+  } catch (e) {
+    alert(e.message);
+    btn.disabled = false; btn.textContent = 'Publish to YouTube';
+  }
+}
+
+$('#form').onsubmit = async (e) => {
+  e.preventDefault();
+  $('#create').disabled = true;
+  try {
+    const job = await api('/api/shorts', { method: 'POST', body: JSON.stringify({
+      topic: $('#topic').value, durationSec: $('#duration').value, language: $('#language').value,
+      voice: $('#voice').value, style: $('#style').value
+    }) });
+    select(job.id);
+  } catch (err) { alert(err.message); }
+  $('#create').disabled = false;
+};
+
+loadOptions().catch(() => {});
+loadJobs().catch(() => {});
+</script>
+</body>
+</html>

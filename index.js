@@ -12,6 +12,8 @@ const { PublishingSchedulingAgent } = require('./agents/publishing-scheduling-ag
 const { AnalyticsOptimizationAgent } = require('./agents/analytics-optimization-agent');
 const { DailyAutomation } = require('./schedules/daily-automation');
 const chalk = require('chalk');
+const { createShortsRouter } = require('./shorts/server');
+const { ShortsPipeline, createOpenAIClient } = require('./shorts/pipeline');
 
 class YouTubeAutomationAgent {
   constructor() {
@@ -87,6 +89,13 @@ class YouTubeAutomationAgent {
   setupAPI() {
     this.app.use(express.json());
     this.app.use(express.static(path.join(__dirname, 'dashboard')));
+
+    // Faceless Shorts studio (dashboard/shorts.html)
+    const openaiKey = this.credentials.credentials?.openai?.apiKey || process.env.OPENAI_API_KEY;
+    this.app.use(createShortsRouter({
+      pipeline: new ShortsPipeline({ openai: createOpenAIClient(openaiKey) }),
+      getYouTubeAuth: () => this.credentials.getYouTubeAuth()
+    }));
     
     // Main dashboard route
     this.app.get('/', (req, res) => {
@@ -198,6 +207,7 @@ class YouTubeAutomationAgent {
       console.log(chalk.green(`\n✅ YouTube Automation Agent running on port ${PORT}`));
       console.log(chalk.gray('─'.repeat(50)));
       console.log(chalk.white('📊 Dashboard: ') + chalk.cyan(`http://localhost:${PORT}`));
+      console.log(chalk.white('🎬 Shorts Studio: ') + chalk.cyan(`http://localhost:${PORT}/shorts.html`));
       console.log(chalk.white('🔧 API Health: ') + chalk.cyan(`http://localhost:${PORT}/health`));
       console.log(chalk.white('📅 Schedule: ') + chalk.cyan(`http://localhost:${PORT}/schedule`));
       console.log(chalk.white('📈 Analytics: ') + chalk.cyan(`http://localhost:${PORT}/analytics`));

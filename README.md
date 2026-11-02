@@ -12,6 +12,34 @@ This system runs 24/7 to:
 - 📅 Upload and schedule videos
 - 📊 Analyze performance and improve over time
 
+## 🎞️ Faceless Shorts Studio
+
+Turns a topic into a finished vertical short (1080x1920 MP4): script, AI voiceover, one AI image per scene with a slow zoom, bold burned-in captions, and optional background music. You can edit or regenerate any scene, then upload to YouTube as a Short.
+
+**Requirements:** `ffmpeg` and `ffprobe` installed (with libass, which most builds include), plus `OPENAI_API_KEY`. Without a key it runs in offline demo mode: a placeholder script, silent narration, and gradient images, which is useful for testing the pipeline.
+
+```bash
+# Web studio (no YouTube/DB setup needed)
+npm run shorts:server            # http://localhost:3000/shorts.html
+
+# Command line
+npm run short -- --topic "Why octopuses have three hearts" --duration 40 --voice onyx --style cinematic
+
+# Tests
+npm run test:shorts
+```
+
+| Setting | Values |
+|---|---|
+| Length | 15–90 seconds (3–12 scenes) |
+| Voice | OpenAI TTS voices: alloy, ash, coral, echo, fable, nova, onyx, sage, shimmer |
+| Style | cinematic, anime, 3d, comic, watercolor, realistic |
+| Language | Any language the model can write; narration, title and tags follow it |
+
+Optional environment variables: `SHORTS_SCRIPT_MODEL` (default `gpt-4o-mini`), `SHORTS_TTS_MODEL` (default `tts-1-hd`), `SHORTS_IMAGE_MODEL` (default `gpt-image-1`; `dall-e-3` also works), `SHORTS_MUSIC_PATH` (an MP3 looped under the narration at low volume), `DEFAULT_PRIVACY_STATUS` (default `private`).
+
+Output for each video goes to `output/shorts/<id>/` (`short.mp4`, scene images and audio, `captions.srt`, `manifest.json`). Publishing uses the YouTube OAuth from `npm run credentials:setup` and also uploads the SRT captions.
+
 ## 💡 How It Works - No Claude Required!
 
 **You do NOT need Claude to use this system!** The YouTube Automation Agent is designed to work with multiple AI providers, giving you flexibility and cost control.
