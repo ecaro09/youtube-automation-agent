@@ -1,0 +1,17 @@
+services:
+  youtube-automation-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: youtube-automation-agent
+    env_file:
+      - .env
+    ports:
+      - "3456:3456"
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./output:/app/output
+    restart: unless-stopped
+    command: ["node", "index.js"]

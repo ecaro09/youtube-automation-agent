@@ -79,3 +79,5 @@ backup/
 # Cache
 .cache/
 *.cache
+# Generated shorts
+output/

@@ -5,9 +5,12 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "short": "node shorts/cli.js",
+    "shorts:server": "node shorts/server.js",
     "setup": "node setup.js",
     "scheduler": "node schedules/daily-automation.js",
     "test": "node test.js",
+    "test:shorts": "node --test \"tests/**/*.test.js\"",
     "agent:strategy": "node agents/content-strategy-agent.js",
     "agent:script": "node agents/script-writer-agent.js",
     "agent:thumbnail": "node agents/thumbnail-designer-agent.js",
@@ -38,6 +41,7 @@
     "openai": "^4.20.0",
     "playwright": "^1.54.2",
     "replicate": "^1.0.1",
+    "sharp": "^0.35.5",
     "sqlite3": "^5.1.6",
     "winston": "^3.11.0"
   },
