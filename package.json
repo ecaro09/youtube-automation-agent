@@ -41,6 +41,7 @@
     "openai": "^4.20.0",
     "playwright": "^1.54.2",
     "replicate": "^1.0.1",
+    "sharp": "^0.35.5",
     "sqlite3": "^5.1.6",
     "winston": "^3.11.0"
   },

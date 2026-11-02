@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const { Logger } = require('./utils/logger');
@@ -23,6 +24,7 @@ class YouTubeAutomationAgent {
     this.agents = {};
     this.app = express();
     this.isInitialized = false;
+    this.studioOnly = false;
   }
 
   async initialize() {
@@ -42,8 +44,11 @@ class YouTubeAutomationAgent {
       
       if (!credentialsValid) {
         console.log(chalk.yellow('\n⚠️  Some credentials are missing or invalid.'));
-        console.log(chalk.yellow('Run: npm run credentials:setup'));
-        return false;
+        console.log(chalk.yellow('Starting in Studio-only mode: the Shorts Studio works, the automation agents are off.'));
+        console.log(chalk.yellow('To enable everything, run: npm run credentials:setup'));
+        this.studioOnly = true;
+        this.setupAPI();
+        return true;
       }
       
       // Initialize agents
@@ -88,24 +93,32 @@ class YouTubeAutomationAgent {
 
   setupAPI() {
     this.app.use(express.json());
-    this.app.use(express.static(path.join(__dirname, 'dashboard')));
+    this.app.use(express.static(path.join(__dirname, 'dashboard'), { index: false }));
 
     // Faceless Shorts studio (dashboard/shorts.html)
-    const openaiKey = this.credentials.credentials?.openai?.apiKey || process.env.OPENAI_API_KEY;
+    const openaiKey = this.credentials?.credentials?.openai?.apiKey || process.env.OPENAI_API_KEY;
     this.app.use(createShortsRouter({
       pipeline: new ShortsPipeline({ openai: createOpenAIClient(openaiKey) }),
-      getYouTubeAuth: () => this.credentials.getYouTubeAuth()
+      getYouTubeAuth: () => this.credentials?.getYouTubeAuth()
     }));
     
     // Main dashboard route
     this.app.get('/', (req, res) => {
+      if (this.studioOnly) return res.redirect('/shorts.html');
       res.sendFile(path.join(__dirname, 'dashboard', 'index.html'));
+    });
+
+    // Agent endpoints need full credentials; explain instead of crashing.
+    this.app.use(['/generate', '/analytics', '/schedule', '/publish'], (req, res, next) => {
+      if (!this.studioOnly) return next();
+      res.status(503).json({ error: 'Automation agents are disabled until credentials are set up. Run: npm run credentials:setup' });
     });
     
     // Health check
     this.app.get('/health', (req, res) => {
       res.json({
         status: 'healthy',
+        mode: this.studioOnly ? 'studio-only' : 'full',
         initialized: this.isInitialized,
         agents: Object.keys(this.agents),
         timestamp: new Date().toISOString()
@@ -212,7 +225,11 @@ class YouTubeAutomationAgent {
       console.log(chalk.white('📅 Schedule: ') + chalk.cyan(`http://localhost:${PORT}/schedule`));
       console.log(chalk.white('📈 Analytics: ') + chalk.cyan(`http://localhost:${PORT}/analytics`));
       console.log(chalk.gray('─'.repeat(50)));
-      console.log(chalk.yellow('\n🤖 Automation is active. Content will be generated and posted daily.'));
+      if (this.studioOnly) {
+        console.log(chalk.yellow('\n🎬 Studio-only mode. Open the Shorts Studio link above.'));
+      } else {
+        console.log(chalk.yellow('\n🤖 Automation is active. Content will be generated and posted daily.'));
+      }
     });
   }
 }

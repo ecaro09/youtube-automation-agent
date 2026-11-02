@@ -18,8 +18,18 @@ Turns a topic into a finished vertical short (1080x1920 MP4): script, AI voiceov
 
 **Requirements:** `ffmpeg` and `ffprobe` installed (with libass, which most builds include), plus `OPENAI_API_KEY`. Without a key it runs in offline demo mode: a placeholder script, silent narration, and gradient images, which is useful for testing the pipeline.
 
+**Quick start (ready to use):**
+
 ```bash
-# Web studio (no YouTube/DB setup needed)
+npm install
+cp .env.example .env             # put your OPENAI_API_KEY in .env
+npm start                        # open http://localhost:3456
+```
+
+If YouTube credentials aren't set up yet, `npm start` runs in **Studio-only mode**: the Shorts Studio works, and the daily automation agents stay off until you run `npm run credentials:setup`. With Docker: `docker compose up --build` (the image includes ffmpeg; videos are saved to `./output`).
+
+```bash
+# Studio on its own
 npm run shorts:server            # http://localhost:3000/shorts.html
 
 # Command line

@@ -12,5 +12,6 @@ services:
       - ./config:/app/config
       - ./data:/app/data
       - ./logs:/app/logs
+      - ./output:/app/output
     restart: unless-stopped
     command: ["node", "index.js"]
